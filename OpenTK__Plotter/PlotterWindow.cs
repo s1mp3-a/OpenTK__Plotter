@@ -8,6 +8,22 @@ using OpenTK.Windowing.GraphicsLibraryFramework;
 
 namespace OpenTK__Plotter
 {
+    static class PlotConfig
+    {
+        public const float GridXSpan = 9f;
+        public const float GridYSpan = 9f;
+        public const float GridZSpan = 16f;
+
+        public const float PlotXSpan = 9f;
+        public const float PlotYSpan = 9f;
+        public const float PlotZSpan = 16f;
+
+        public const int MeshResX = 50;
+        public const int MeshResZ = 50;
+
+        public static readonly Color4 Background = new Color4(.2f, .3f, .4f, 1f);
+    }
+
     public class PlotterWindow : GameWindow
     {
         private readonly PlotGrid _plotGrid;
@@ -15,12 +31,15 @@ namespace OpenTK__Plotter
 
         private int _vaoBoundary;
         private int _vboBoundary;
+
         private int _vaoGridLines;
         private int _vboGridLines;
 
         private int _vaoPlotMesh;
         private int _vboPlotMesh;
         private int _eboPlotMesh;
+
+        private int _computeBuffer;
 
         private Camera _camera;
         private CenteredCamera _centeredCamera;
@@ -29,14 +48,23 @@ namespace OpenTK__Plotter
 
         private Shader _gridShader;
         private Shader _plotShader;
+        private ComputeShader _meshComputeShader;
 
         private float _timer;
 
         public PlotterWindow(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
             : base(gameWindowSettings, nativeWindowSettings)
         {
-            _plotGrid = new PlotGrid(9f, 16f, 9f);
-            _plotMesh = new PlotMesh(9f, 9f, 16f, 100, 100);
+            _plotGrid = new PlotGrid(PlotConfig.GridXSpan,
+                PlotConfig.GridZSpan,
+                PlotConfig.GridYSpan);
+
+            _plotMesh = new PlotMesh(PlotConfig.PlotXSpan,
+                PlotConfig.PlotYSpan,
+                PlotConfig.PlotZSpan,
+                PlotConfig.MeshResX,
+                PlotConfig.MeshResZ);
+
             _plotMesh.ConstructMesh();
         }
 
@@ -44,13 +72,12 @@ namespace OpenTK__Plotter
         {
             base.OnLoad();
 
-            GL.ClearColor(0.2f, 0.3f, 0.4f, 1.0f);
+            GL.ClearColor(PlotConfig.Background);
 
             GL.Enable(EnableCap.DepthTest);
 
             _vaoBoundary = GL.GenVertexArray();
             GL.BindVertexArray(_vaoBoundary);
-
             _vboBoundary = GL.GenBuffer();
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vboBoundary);
             GL.BufferData
@@ -60,7 +87,6 @@ namespace OpenTK__Plotter
                 _plotGrid.Boundaries,
                 BufferUsageHint.StaticDraw
             );
-
             GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), 0);
             GL.EnableVertexAttribArray(0);
 
@@ -106,6 +132,17 @@ namespace OpenTK__Plotter
 
             _plotShader = new Shader("../../../gridShader.vert", "../../../plotShader.frag");
 
+            _meshComputeShader = new ComputeShader("../../../meshCompute.glsl");
+            _computeBuffer = GL.GenBuffer();
+            GL.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, 0, _computeBuffer);
+            GL.BufferData
+            (
+                BufferTarget.ShaderStorageBuffer,
+                sizeof(float) * PlotConfig.MeshResX * PlotConfig.MeshResZ * 3,
+                IntPtr.Zero,
+                BufferUsageHint.DynamicRead
+            );
+
             _camera = new Camera(Vector3.UnitZ * 3, Size.X / (float) Size.Y);
 
             var center = new Vector3(_plotGrid.XSpan / 2, _plotGrid.YSpan / 2, _plotGrid.ZSpan / 2);
@@ -121,7 +158,7 @@ namespace OpenTK__Plotter
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
             _gridShader.Use();
-            
+
             _gridShader.SetMatrix4("model", Matrix4.Identity);
             _gridShader.SetMatrix4("view", _centeredCamera.GetViewMatrix());
             _gridShader.SetMatrix4("projection", _centeredCamera.GetProjectionMatrix());
@@ -130,14 +167,16 @@ namespace OpenTK__Plotter
             GL.DrawArrays(PrimitiveType.LineLoop, 0, 12);
             GL.BindVertexArray(_vaoGridLines);
             GL.DrawArrays(PrimitiveType.Lines, 0, (_plotGrid.Tiles + _plotGrid.Tiles - 2) * 2 * 3);
-            
+
             _plotShader.Use();
-            
+
             _plotShader.SetMatrix4("model", Matrix4.Identity);
             _plotShader.SetMatrix4("view", _centeredCamera.GetViewMatrix());
             _plotShader.SetMatrix4("projection", _centeredCamera.GetProjectionMatrix());
-            
+
             GL.BindVertexArray(_vaoPlotMesh);
+            //GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Point);
+            //GL.PointSize(5f);
             GL.DrawElements(PrimitiveType.Triangles, _plotMesh.Triangles.Length, DrawElementsType.UnsignedInt, 0);
 
             SwapBuffers();
@@ -148,13 +187,16 @@ namespace OpenTK__Plotter
             base.OnUpdateFrame(e);
             if (!IsFocused)
             {
-             //   return;
+                //   return;
             }
 
+            Title = $"FPS: {1 / (float) e.Time}";
+
             _timer += (float) e.Time;
-            if (_timer > 1/8f)
+            if (_timer > 1 / 8f)
             {
-                UpdatePlotBuffer(_timer);
+                //UpdatePlotBuffer(_timer);
+                UpdatePlotBufferCompute(_timer);
             }
 
             #region InputControls
@@ -252,11 +294,54 @@ namespace OpenTK__Plotter
             #endregion
         }
 
+
+        private unsafe void UpdatePlotBufferCompute(float timer)
+        {
+            // For some reason buffer sub data does not work
+            //  GL.BufferSubData
+            //  (
+            //      BufferTarget.ShaderStorageBuffer,
+            //      IntPtr.Zero,
+            //      sizeof(float) * PlotConfig.MeshResX * PlotConfig.MeshResZ * 3,
+            //      IntPtr.Zero
+            //  );
+
+            //GL.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, 0, _computeBuffer);
+            GL.BufferData
+            (
+                BufferTarget.ShaderStorageBuffer,
+                sizeof(float) * PlotConfig.MeshResX * PlotConfig.MeshResZ * 3,
+                IntPtr.Zero,
+                BufferUsageHint.DynamicRead
+            );
+            
+            _meshComputeShader.Use();
+            _meshComputeShader.SetFloat("xSpan", PlotConfig.PlotXSpan);
+            _meshComputeShader.SetFloat("zSpan", PlotConfig.PlotZSpan);
+            _meshComputeShader.SetFloat("timer", timer);
+            _meshComputeShader.Dispatch(PlotConfig.MeshResX, PlotConfig.MeshResZ);
+            _meshComputeShader.Wait();
+
+            var dataPtr = (float*) GL.MapBuffer(BufferTarget.ShaderStorageBuffer, BufferAccess.ReadOnly);
+            //var vertices = new float[PlotConfig.MeshResX * PlotConfig.MeshResZ];
+            //Marshal.Copy((IntPtr) dataPtr, vertices, 0, vertices.Length);
+            
+            GL.BindBuffer(BufferTarget.ArrayBuffer, _vboPlotMesh);
+            GL.BufferSubData
+            (
+                BufferTarget.ArrayBuffer,
+                IntPtr.Zero,
+                sizeof(float) * PlotConfig.MeshResX * PlotConfig.MeshResZ * 3,
+                (IntPtr) dataPtr
+            );
+        }
+
         private void UpdatePlotBuffer(float timer)
         {
             _plotMesh.ConstructMesh(timer);
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vboPlotMesh);
-            GL.BufferSubData(BufferTarget.ArrayBuffer, IntPtr.Zero, _plotMesh.Vertices.Length * sizeof(float) * 3, _plotMesh.Vertices);
+            GL.BufferSubData(BufferTarget.ArrayBuffer, IntPtr.Zero, _plotMesh.Vertices.Length * sizeof(float) * 3,
+                _plotMesh.Vertices);
         }
 
         protected override void OnMouseWheel(MouseWheelEventArgs e)

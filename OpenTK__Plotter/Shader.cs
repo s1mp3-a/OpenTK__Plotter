@@ -67,7 +67,8 @@ namespace OpenTK__Plotter
             GL.GetProgram(programHandle, GetProgramParameterName.LinkStatus, out var code);
             if (code != (int) All.True)
             {
-                throw new Exception($"Error occured whilst linking Program({programHandle})");
+                var infolog = GL.GetProgramInfoLog(programHandle);
+                throw new Exception($"Error occured whilst linking Program({programHandle}).\n\n{infolog}");
             }
         }
 
