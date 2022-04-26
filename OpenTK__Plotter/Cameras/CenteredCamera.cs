@@ -1,6 +1,6 @@
 ﻿using OpenTK.Mathematics;
 
-namespace OpenTK__Plotter
+namespace OpenTK__Plotter.Cameras
 {
     public class CenteredCamera
     {

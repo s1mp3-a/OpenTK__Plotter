@@ -5,6 +5,7 @@ using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.GraphicsLibraryFramework;
+using OpenTK__Plotter.Cameras;
 
 namespace OpenTK__Plotter
 {
@@ -41,8 +42,10 @@ namespace OpenTK__Plotter
 
         private int _computeBuffer;
 
-        private Camera _camera;
+        private FlyingCamera _flyingCamera;
         private CenteredCamera _centeredCamera;
+        private Camera _testCam;
+
         private bool _firstMove = true;
         private Vector2 _lastPos;
 
@@ -71,6 +74,8 @@ namespace OpenTK__Plotter
         protected override void OnLoad()
         {
             base.OnLoad();
+
+            PrintOpenGlInfo();
 
             GL.ClearColor(PlotConfig.Background);
 
@@ -143,12 +148,22 @@ namespace OpenTK__Plotter
                 BufferUsageHint.DynamicRead
             );
 
-            _camera = new Camera(Vector3.UnitZ * 3, Size.X / (float) Size.Y);
-
+            _flyingCamera = new FlyingCamera(Vector3.UnitZ * 3, Size.X / (float) Size.Y);
+            _testCam = _flyingCamera;
             var center = new Vector3(_plotGrid.XSpan / 2, _plotGrid.YSpan / 2, _plotGrid.ZSpan / 2);
             _centeredCamera = new CenteredCamera(center, Size.X / (float) Size.Y);
 
             CursorGrabbed = false;
+        }
+
+        private void PrintOpenGlInfo()
+        {
+            Console.WriteLine("Using the following openGL parameters:");
+            Console.WriteLine($"GL vendor -- {GL.GetString(StringName.Vendor)}");
+            Console.WriteLine($"GL renderer -- {GL.GetString(StringName.Renderer)}");
+            Console.WriteLine($"GL extensions -- {GL.GetString(StringName.Extensions)}");
+            Console.WriteLine($"GL version -- {GL.GetString(StringName.Version)}");
+            Console.WriteLine($"GL shading lang version -- {GL.GetString(StringName.ShadingLanguageVersion)}");
         }
 
         protected override void OnRenderFrame(FrameEventArgs args)
@@ -159,9 +174,9 @@ namespace OpenTK__Plotter
 
             _gridShader.Use();
 
-            _gridShader.SetMatrix4("model", Matrix4.Identity);
-            _gridShader.SetMatrix4("view", _centeredCamera.GetViewMatrix());
-            _gridShader.SetMatrix4("projection", _centeredCamera.GetProjectionMatrix());
+            _gridShader.SetMatrix4("model", _testCam.GetModelMatrix());
+            _gridShader.SetMatrix4("view", _testCam.GetViewMatrix());
+            _gridShader.SetMatrix4("projection", _testCam.GetProjectionMatrix());
 
             GL.BindVertexArray(_vaoBoundary);
             GL.DrawArrays(PrimitiveType.LineLoop, 0, 12);
@@ -170,9 +185,9 @@ namespace OpenTK__Plotter
 
             _plotShader.Use();
 
-            _plotShader.SetMatrix4("model", Matrix4.Identity);
-            _plotShader.SetMatrix4("view", _centeredCamera.GetViewMatrix());
-            _plotShader.SetMatrix4("projection", _centeredCamera.GetProjectionMatrix());
+            _plotShader.SetMatrix4("model", _testCam.GetModelMatrix());
+            _plotShader.SetMatrix4("view", _testCam.GetViewMatrix());
+            _plotShader.SetMatrix4("projection", _testCam.GetProjectionMatrix());
 
             GL.BindVertexArray(_vaoPlotMesh);
             //GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Point);
@@ -198,100 +213,103 @@ namespace OpenTK__Plotter
                 //UpdatePlotBuffer(_timer);
                 UpdatePlotBufferCompute(_timer);
             }
-
-            #region InputControls
-
-            var input = KeyboardState;
-
-            if (input.IsKeyDown(Keys.Escape))
-            {
-                Close();
-            }
-
-            const float cameraSpeed = 1.5f;
-            const float sensitivity = 0.2f;
-
-            if (input.IsKeyDown(Keys.E))
-            {
-                _centeredCamera.ZAngle += 0.5f * (float) e.Time;
-            }
-
-            if (input.IsKeyDown(Keys.Q))
-            {
-                _centeredCamera.ZAngle -= 0.5f * (float) e.Time;
-            }
-
-            if (input.IsKeyDown(Keys.R))
-            {
-                _centeredCamera.ResetAngles();
-            }
-
-            if (input.IsKeyReleased(Keys.F))
-            {
-                _centeredCamera.IsOrthographic = !_centeredCamera.IsOrthographic;
-            }
-
-            if (input.IsKeyDown(Keys.W))
-            {
-                _camera.Position += _camera.Front * cameraSpeed * (float) e.Time; // Forward
-                //_centeredCamera.XAngle += 0.5f * (float) e.Time;
-            }
-
-            if (input.IsKeyDown(Keys.S))
-            {
-                _camera.Position -= _camera.Front * cameraSpeed * (float) e.Time; // Backwards
-                //_centeredCamera.XAngle -= 0.5f * (float) e.Time;
-            }
-
-            if (input.IsKeyDown(Keys.A))
-            {
-                _camera.Position -= _camera.Right * cameraSpeed * (float) e.Time; // Left
-                _centeredCamera.YAngle += 0.5f * (float) e.Time;
-            }
-
-            if (input.IsKeyDown(Keys.D))
-            {
-                _camera.Position += _camera.Right * cameraSpeed * (float) e.Time; // Right
-                _centeredCamera.YAngle -= 0.5f * (float) e.Time;
-            }
-
-            if (input.IsKeyDown(Keys.Space))
-            {
-                _camera.Position += _camera.Up * cameraSpeed * (float) e.Time; // Up
-            }
-
-            if (input.IsKeyDown(Keys.LeftShift))
-            {
-                _camera.Position -= _camera.Up * cameraSpeed * (float) e.Time; // Down
-            }
-
-            // Get the mouse state
-            var mouse = MouseState;
-
-            if (_firstMove) // This bool variable is initially set to true.
-            {
-                _lastPos = new Vector2(mouse.X, mouse.Y);
-                _firstMove = false;
-            }
-            else
-            {
-                // Calculate the offset of the mouse position
-                var deltaX = mouse.X - _lastPos.X;
-                var deltaY = mouse.Y - _lastPos.Y;
-                _lastPos = new Vector2(mouse.X, mouse.Y);
-
-                // Apply the camera pitch and yaw (we clamp the pitch in the camera class)
-                _camera.Yaw += deltaX * sensitivity;
-                _camera.Pitch -= deltaY * sensitivity; // Reversed since y-coordinates range from bottom to top
-
-                if (mouse.IsAnyButtonDown)
-                {
-                    _centeredCamera.YAngle += deltaX * sensitivity * (float) e.Time;
-                    _centeredCamera.ZAngle -= deltaY * sensitivity * (float) e.Time;
-                }
-            }
-
-            #endregion
+            
+            _testCam.UpdateCamera(e, KeyboardState, MouseState);
+            
+            //
+            // #region InputControls
+            //
+            // var input = KeyboardState;
+            //
+            // if (input.IsKeyDown(Keys.Escape))
+            // {
+            //     Close();
+            // }
+            //
+            // const float cameraSpeed = 1.5f;
+            // const float sensitivity = 0.2f;
+            //
+            // if (input.IsKeyDown(Keys.E))
+            // {
+            //     _centeredCamera.ZAngle += 0.5f * (float) e.Time;
+            // }
+            //
+            // if (input.IsKeyDown(Keys.Q))
+            // {
+            //     _centeredCamera.ZAngle -= 0.5f * (float) e.Time;
+            // }
+            //
+            // if (input.IsKeyDown(Keys.R))
+            // {
+            //     _centeredCamera.ResetAngles();
+            // }
+            //
+            // if (input.IsKeyReleased(Keys.F))
+            // {
+            //     _centeredCamera.IsOrthographic = !_centeredCamera.IsOrthographic;
+            // }
+            //
+            // if (input.IsKeyDown(Keys.W))
+            // {
+            //     _flyingCamera.Position += _flyingCamera.Front * cameraSpeed * (float) e.Time; // Forward
+            //     //_centeredCamera.XAngle += 0.5f * (float) e.Time;
+            // }
+            //
+            // if (input.IsKeyDown(Keys.S))
+            // {
+            //     _flyingCamera.Position -= _flyingCamera.Front * cameraSpeed * (float) e.Time; // Backwards
+            //     //_centeredCamera.XAngle -= 0.5f * (float) e.Time;
+            // }
+            //
+            // if (input.IsKeyDown(Keys.A))
+            // {
+            //     _flyingCamera.Position -= _flyingCamera.Right * cameraSpeed * (float) e.Time; // Left
+            //     _centeredCamera.YAngle += 0.5f * (float) e.Time;
+            // }
+            //
+            // if (input.IsKeyDown(Keys.D))
+            // {
+            //     _flyingCamera.Position += _flyingCamera.Right * cameraSpeed * (float) e.Time; // Right
+            //     _centeredCamera.YAngle -= 0.5f * (float) e.Time;
+            // }
+            //
+            // if (input.IsKeyDown(Keys.Space))
+            // {
+            //     _flyingCamera.Position += _flyingCamera.Up * cameraSpeed * (float) e.Time; // Up
+            // }
+            //
+            // if (input.IsKeyDown(Keys.LeftShift))
+            // {
+            //     _flyingCamera.Position -= _flyingCamera.Up * cameraSpeed * (float) e.Time; // Down
+            // }
+            //
+            // // Get the mouse state
+            // var mouse = MouseState;
+            //
+            // if (_firstMove) // This bool variable is initially set to true.
+            // {
+            //     _lastPos = new Vector2(mouse.X, mouse.Y);
+            //     _firstMove = false;
+            // }
+            // else
+            // {
+            //     // Calculate the offset of the mouse position
+            //     var deltaX = mouse.X - _lastPos.X;
+            //     var deltaY = mouse.Y - _lastPos.Y;
+            //     _lastPos = new Vector2(mouse.X, mouse.Y);
+            //
+            //     // Apply the camera pitch and yaw (we clamp the pitch in the camera class)
+            //     _flyingCamera.Yaw += deltaX * sensitivity;
+            //     _flyingCamera.Pitch -= deltaY * sensitivity; // Reversed since y-coordinates range from bottom to top
+            //
+            //     if (mouse.IsAnyButtonDown)
+            //     {
+            //         _centeredCamera.YAngle += deltaX * sensitivity * (float) e.Time;
+            //         _centeredCamera.ZAngle -= deltaY * sensitivity * (float) e.Time;
+            //     }
+            // }
+            //
+            // #endregion
         }
 
 

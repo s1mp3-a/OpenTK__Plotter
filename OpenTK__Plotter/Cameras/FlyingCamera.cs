@@ -1,9 +1,9 @@
-﻿using System;
-using OpenTK.Mathematics;
+﻿using OpenTK.Mathematics;
+using OpenTK__Plotter.Cameras.Camera_controls;
 
-namespace OpenTK__Plotter
+namespace OpenTK__Plotter.Cameras
 {
-    public class Camera
+    public class FlyingCamera : Camera
     {
         // Those vectors are directions pointing outwards from the camera to define how it rotated.
         private Vector3 _front = -Vector3.UnitZ;
@@ -21,7 +21,8 @@ namespace OpenTK__Plotter
         // The field of view of the camera (radians)
         private float _fov = MathHelper.PiOver2;
 
-        public Camera(Vector3 position, float aspectRatio)
+        public FlyingCamera(Vector3 position, float aspectRatio)
+             : base(new FlyingCameraControls())
         {
             Position = position;
             AspectRatio = aspectRatio;
@@ -29,9 +30,13 @@ namespace OpenTK__Plotter
 
         // The position of the camera
         public Vector3 Position { get; set; }
+        
+        public Vector2 LastPos { get; set; }
 
         // This is simply the aspect ratio of the viewport, used for the projection matrix.
         public float AspectRatio { private get; set; }
+
+        public bool FirstMove { get; set; } = true;
 
         public Vector3 Front => _front;
 
@@ -80,14 +85,14 @@ namespace OpenTK__Plotter
         }
 
         // Get the view matrix using the amazing LookAt function described more in depth on the web tutorials
-        public Matrix4 GetViewMatrix()
+        public override Matrix4 GetViewMatrix()
         {
             //return Matrix4.LookAt(Position, new Vector3(1f, 1f, 1.5f), Vector3.UnitY);
             return Matrix4.LookAt(Position, Position + _front, Vector3.UnitY);
         }
 
         // Get the projection matrix using the same method we have used up until this point
-        public Matrix4 GetProjectionMatrix()
+        public override Matrix4 GetProjectionMatrix()
         {
             //return Matrix4.CreateOrthographic(5, 5, -50f, 50f);
             return Matrix4.CreatePerspectiveFieldOfView(_fov, AspectRatio, 0.01f, 100f);
