@@ -11,6 +11,7 @@ namespace OpenTK__Plotter
         public readonly int Handle;
         private readonly Dictionary<string, int> _uniformLocations;
 
+        //Create vertex -> fragment shader pipeline from GLSL code
         public Shader(string vertPath, string fragPath)
         {
             var shaderSource = File.ReadAllText(vertPath);
@@ -38,6 +39,7 @@ namespace OpenTK__Plotter
             
             GL.GetProgram(Handle, GetProgramParameterName.ActiveUniforms, out var numberOfUniforms);
 
+            //Map uniform locations at compile time for future access at runtime
             _uniformLocations = new Dictionary<string, int>();
             for (int i = 0; i < numberOfUniforms; i++)
             {

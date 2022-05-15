@@ -9,7 +9,7 @@ namespace OpenTK__Plotter
         private readonly float[] _gridLines;
 
 
-        private readonly int _tiles = 6;
+        private readonly int _tiles;
 
         public float XSpan { get; private set; }
         public float ZSpan { get; private set; }
@@ -19,12 +19,14 @@ namespace OpenTK__Plotter
         public float[] GridLines => _gridLines;
         public int Tiles => _tiles;
 
-        public PlotGrid(float xSpan, float zSpan, float ySpan)
+        public PlotGrid(float xSpan, float zSpan, float ySpan, int tileCount)
         {
+            _tiles = tileCount;
+            
             XSpan = xSpan;
             ZSpan = zSpan;
             YSpan = ySpan;
-            
+
             float[] zxBoundary = Array.Empty<float>();
             float[] zxGridLines = Array.Empty<float>();
             

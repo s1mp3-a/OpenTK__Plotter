@@ -6,17 +6,18 @@ namespace OpenTK__Plotter.Cameras
     public class FlyingCamera : Camera
     {
         // Those vectors are directions pointing outwards from the camera to define how it rotated.
-        private Vector3 _front = -Vector3.UnitZ;
-
+        
         private Vector3 _up = Vector3.UnitY;
 
         private Vector3 _right = Vector3.UnitX;
+
+        private Vector3 _front = -Vector3.UnitZ;
 
         // Rotation around the X axis (radians)
         private float _pitch;
 
         // Rotation around the Y axis (radians)
-        private float _yaw = -MathHelper.PiOver2; // Without this, you would be started rotated 90 degrees right.
+        private float _yaw = -MathHelper.PiOver2;
 
         // The field of view of the camera (radians)
         private float _fov = MathHelper.PiOver2;
@@ -50,9 +51,7 @@ namespace OpenTK__Plotter.Cameras
             get => MathHelper.RadiansToDegrees(_pitch);
             set
             {
-                // We clamp the pitch value between -89 and 89 to prevent the camera from going upside down, and a bunch
-                // of weird "bugs" when you are using euler angles for rotation.
-                // If you want to read more about this you can try researching a topic called gimbal lock
+                // We clamp the pitch value between -89 and 89 to prevent the camera from going upside down, and to avoid gimbal lock
                 var angle = MathHelper.Clamp(value, -89f, 89f);
                 _pitch = MathHelper.DegreesToRadians(angle);
                 UpdateVectors();
@@ -70,9 +69,7 @@ namespace OpenTK__Plotter.Cameras
             }
         }
 
-        // The field of view (FOV) is the vertical angle of the camera view.
-        // This has been discussed more in depth in a previous tutorial,
-        // but in this tutorial, you have also learned how we can use this to simulate a zoom feature.
+        // The field of view of the camera view.
         // We convert from degrees to radians as soon as the property is set to improve performance.
         public float Fov
         {
@@ -83,22 +80,18 @@ namespace OpenTK__Plotter.Cameras
                 _fov = MathHelper.DegreesToRadians(angle);
             }
         }
-
-        // Get the view matrix using the amazing LookAt function described more in depth on the web tutorials
+        
         public override Matrix4 GetViewMatrix()
         {
-            //return Matrix4.LookAt(Position, new Vector3(1f, 1f, 1.5f), Vector3.UnitY);
             return Matrix4.LookAt(Position, Position + _front, Vector3.UnitY);
         }
-
-        // Get the projection matrix using the same method we have used up until this point
+        
         public override Matrix4 GetProjectionMatrix()
         {
-            //return Matrix4.CreateOrthographic(5, 5, -50f, 50f);
             return Matrix4.CreatePerspectiveFieldOfView(_fov, AspectRatio, 0.01f, 100f);
         }
 
-        // This function is going to update the direction vertices using some of the math learned in the web tutorials.
+        // This function is going to update the direction
         private void UpdateVectors()
         {
             // First, the front matrix is calculated using some basic trigonometry.
@@ -110,8 +103,6 @@ namespace OpenTK__Plotter.Cameras
             _front = Vector3.Normalize(_front);
 
             // Calculate both the right and the up vector using cross product.
-            // Note that we are calculating the right from the global up; this behaviour might
-            // not be what you need for all cameras so keep this in mind if you do not want a FPS camera.
             _right = Vector3.Normalize(Vector3.Cross(_front, Vector3.UnitY));
             _up = Vector3.Normalize(Vector3.Cross(_right, _front));
         }

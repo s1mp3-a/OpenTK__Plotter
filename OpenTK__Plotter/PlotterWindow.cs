@@ -11,6 +11,7 @@ namespace OpenTK__Plotter
 {
     static class PlotConfig
     {
+        public const int GridTileCount = 6;
         public const float GridXSpan = 9f;
         public const float GridYSpan = 9f;
         public const float GridZSpan = 16f;
@@ -19,38 +20,50 @@ namespace OpenTK__Plotter
         public const float PlotYSpan = 9f;
         public const float PlotZSpan = 16f;
 
-        public const int MeshResX = 50;
-        public const int MeshResZ = 50;
+        public const int MeshResX = 100;
+        public const int MeshResZ = 100;
 
         public static readonly Color4 Background = new Color4(.2f, .3f, .4f, 1f);
     }
 
     public class PlotterWindow : GameWindow
     {
+        //The grid of the plot space
         private readonly PlotGrid _plotGrid;
+        
+        //The mesh to render
+        //It also contains indices that determine in which order to render triangles of the mesh
         private readonly PlotMesh _plotMesh;
 
+        //Vertex array object of the boundary of the plot space
         private int _vaoBoundary;
+        //Vertex buffer object of the boundary of the plot space
         private int _vboBoundary;
 
+        //Vertex array object of the lines that make up tiles of the grid
         private int _vaoGridLines;
+        //Vertex buffer object of these lines
         private int _vboGridLines;
 
+        //Vertex array object of the mesh of the surface that is plotted
         private int _vaoPlotMesh;
+        //Vertex buffer object of the mesh
         private int _vboPlotMesh;
+        //Element buffer object that stores the indices of triangles of the plot mesh
         private int _eboPlotMesh;
 
+        //The buffer that is used to compute the vertices of the plot mesh on a GPU
         private int _computeBuffer;
 
+        //Cameras setup
         private FlyingCamera _flyingCamera;
         private CenteredCamera _centeredCamera;
-        private Camera _testCam;
+        private Camera _activeCamera;
 
-        private bool _firstMove = true;
-        private Vector2 _lastPos;
-
+        //Render shader setup
         private Shader _gridShader;
         private Shader _plotShader;
+        //Compute shader setup
         private ComputeShader _meshComputeShader;
 
         private float _timer;
@@ -60,7 +73,8 @@ namespace OpenTK__Plotter
         {
             _plotGrid = new PlotGrid(PlotConfig.GridXSpan,
                 PlotConfig.GridZSpan,
-                PlotConfig.GridYSpan);
+                PlotConfig.GridYSpan,
+                PlotConfig.GridTileCount);
 
             _plotMesh = new PlotMesh(PlotConfig.PlotXSpan,
                 PlotConfig.PlotYSpan,
@@ -69,6 +83,12 @@ namespace OpenTK__Plotter
                 PlotConfig.MeshResZ);
 
             _plotMesh.ConstructMesh();
+            
+            _flyingCamera = new FlyingCamera(Vector3.UnitZ * 3, Size.X / (float) Size.Y);
+            var center = new Vector3(_plotGrid.XSpan / 2, _plotGrid.YSpan / 2, _plotGrid.ZSpan / 2);
+            _centeredCamera = new CenteredCamera(center, Size.X / (float) Size.Y);
+
+            _activeCamera = _centeredCamera;
         }
 
         protected override void OnLoad()
@@ -77,6 +97,8 @@ namespace OpenTK__Plotter
 
             PrintOpenGlInfo();
 
+            //The next stuff is set here instead of being initialized in a constructor so that there is
+            //an existing openGL context to work with
             GL.ClearColor(PlotConfig.Background);
 
             GL.Enable(EnableCap.DepthTest);
@@ -148,11 +170,6 @@ namespace OpenTK__Plotter
                 BufferUsageHint.DynamicRead
             );
 
-            _flyingCamera = new FlyingCamera(Vector3.UnitZ * 3, Size.X / (float) Size.Y);
-            _testCam = _flyingCamera;
-            var center = new Vector3(_plotGrid.XSpan / 2, _plotGrid.YSpan / 2, _plotGrid.ZSpan / 2);
-            _centeredCamera = new CenteredCamera(center, Size.X / (float) Size.Y);
-
             CursorGrabbed = false;
         }
 
@@ -172,28 +189,35 @@ namespace OpenTK__Plotter
 
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
+            //Use the grid render pipeline
             _gridShader.Use();
 
-            _gridShader.SetMatrix4("model", _testCam.GetModelMatrix());
-            _gridShader.SetMatrix4("view", _testCam.GetViewMatrix());
-            _gridShader.SetMatrix4("projection", _testCam.GetProjectionMatrix());
+            //Set model-view-projection uniforms in the render pipeline
+            _gridShader.SetMatrix4("model", _activeCamera.GetModelMatrix());
+            _gridShader.SetMatrix4("view", _activeCamera.GetViewMatrix());
+            _gridShader.SetMatrix4("projection", _activeCamera.GetProjectionMatrix());
 
+            //Draw the grid of the plot
             GL.BindVertexArray(_vaoBoundary);
             GL.DrawArrays(PrimitiveType.LineLoop, 0, 12);
             GL.BindVertexArray(_vaoGridLines);
             GL.DrawArrays(PrimitiveType.Lines, 0, (_plotGrid.Tiles + _plotGrid.Tiles - 2) * 2 * 3);
 
+            //Use the surface render pipeline
             _plotShader.Use();
 
-            _plotShader.SetMatrix4("model", _testCam.GetModelMatrix());
-            _plotShader.SetMatrix4("view", _testCam.GetViewMatrix());
-            _plotShader.SetMatrix4("projection", _testCam.GetProjectionMatrix());
+            //set model-view-projection uniforms in the render pipeline
+            _plotShader.SetMatrix4("model", _activeCamera.GetModelMatrix());
+            _plotShader.SetMatrix4("view", _activeCamera.GetViewMatrix());
+            _plotShader.SetMatrix4("projection", _activeCamera.GetProjectionMatrix());
 
+            //Draw surface mesh
             GL.BindVertexArray(_vaoPlotMesh);
-            //GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Point);
-            //GL.PointSize(5f);
+            /*GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Line);
+            GL.PointSize(5f);*/
             GL.DrawElements(PrimitiveType.Triangles, _plotMesh.Triangles.Length, DrawElementsType.UnsignedInt, 0);
 
+            //Swap the render and draw buffers (that's just how openGL works)
             SwapBuffers();
         }
 
@@ -202,7 +226,12 @@ namespace OpenTK__Plotter
             base.OnUpdateFrame(e);
             if (!IsFocused)
             {
-                //   return;
+                return;
+            }
+
+            if (IsKeyDown(Keys.Escape))
+            {
+                Close();
             }
 
             Title = $"FPS: {1 / (float) e.Time}";
@@ -214,117 +243,13 @@ namespace OpenTK__Plotter
                 UpdatePlotBufferCompute(_timer);
             }
             
-            _testCam.UpdateCamera(e, KeyboardState, MouseState);
-            
-            //
-            // #region InputControls
-            //
-            // var input = KeyboardState;
-            //
-            // if (input.IsKeyDown(Keys.Escape))
-            // {
-            //     Close();
-            // }
-            //
-            // const float cameraSpeed = 1.5f;
-            // const float sensitivity = 0.2f;
-            //
-            // if (input.IsKeyDown(Keys.E))
-            // {
-            //     _centeredCamera.ZAngle += 0.5f * (float) e.Time;
-            // }
-            //
-            // if (input.IsKeyDown(Keys.Q))
-            // {
-            //     _centeredCamera.ZAngle -= 0.5f * (float) e.Time;
-            // }
-            //
-            // if (input.IsKeyDown(Keys.R))
-            // {
-            //     _centeredCamera.ResetAngles();
-            // }
-            //
-            // if (input.IsKeyReleased(Keys.F))
-            // {
-            //     _centeredCamera.IsOrthographic = !_centeredCamera.IsOrthographic;
-            // }
-            //
-            // if (input.IsKeyDown(Keys.W))
-            // {
-            //     _flyingCamera.Position += _flyingCamera.Front * cameraSpeed * (float) e.Time; // Forward
-            //     //_centeredCamera.XAngle += 0.5f * (float) e.Time;
-            // }
-            //
-            // if (input.IsKeyDown(Keys.S))
-            // {
-            //     _flyingCamera.Position -= _flyingCamera.Front * cameraSpeed * (float) e.Time; // Backwards
-            //     //_centeredCamera.XAngle -= 0.5f * (float) e.Time;
-            // }
-            //
-            // if (input.IsKeyDown(Keys.A))
-            // {
-            //     _flyingCamera.Position -= _flyingCamera.Right * cameraSpeed * (float) e.Time; // Left
-            //     _centeredCamera.YAngle += 0.5f * (float) e.Time;
-            // }
-            //
-            // if (input.IsKeyDown(Keys.D))
-            // {
-            //     _flyingCamera.Position += _flyingCamera.Right * cameraSpeed * (float) e.Time; // Right
-            //     _centeredCamera.YAngle -= 0.5f * (float) e.Time;
-            // }
-            //
-            // if (input.IsKeyDown(Keys.Space))
-            // {
-            //     _flyingCamera.Position += _flyingCamera.Up * cameraSpeed * (float) e.Time; // Up
-            // }
-            //
-            // if (input.IsKeyDown(Keys.LeftShift))
-            // {
-            //     _flyingCamera.Position -= _flyingCamera.Up * cameraSpeed * (float) e.Time; // Down
-            // }
-            //
-            // // Get the mouse state
-            // var mouse = MouseState;
-            //
-            // if (_firstMove) // This bool variable is initially set to true.
-            // {
-            //     _lastPos = new Vector2(mouse.X, mouse.Y);
-            //     _firstMove = false;
-            // }
-            // else
-            // {
-            //     // Calculate the offset of the mouse position
-            //     var deltaX = mouse.X - _lastPos.X;
-            //     var deltaY = mouse.Y - _lastPos.Y;
-            //     _lastPos = new Vector2(mouse.X, mouse.Y);
-            //
-            //     // Apply the camera pitch and yaw (we clamp the pitch in the camera class)
-            //     _flyingCamera.Yaw += deltaX * sensitivity;
-            //     _flyingCamera.Pitch -= deltaY * sensitivity; // Reversed since y-coordinates range from bottom to top
-            //
-            //     if (mouse.IsAnyButtonDown)
-            //     {
-            //         _centeredCamera.YAngle += deltaX * sensitivity * (float) e.Time;
-            //         _centeredCamera.ZAngle -= deltaY * sensitivity * (float) e.Time;
-            //     }
-            // }
-            //
-            // #endregion
+            _activeCamera.UpdateCamera(e, KeyboardState, MouseState);
         }
 
 
+        //Surface mesh generation on a GPU
         private unsafe void UpdatePlotBufferCompute(float timer)
         {
-            // For some reason buffer sub data does not work
-            //  GL.BufferSubData
-            //  (
-            //      BufferTarget.ShaderStorageBuffer,
-            //      IntPtr.Zero,
-            //      sizeof(float) * PlotConfig.MeshResX * PlotConfig.MeshResZ * 3,
-            //      IntPtr.Zero
-            //  );
-
-            //GL.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, 0, _computeBuffer);
             GL.BufferData
             (
                 BufferTarget.ShaderStorageBuffer,
@@ -341,9 +266,7 @@ namespace OpenTK__Plotter
             _meshComputeShader.Wait();
 
             var dataPtr = (float*) GL.MapBuffer(BufferTarget.ShaderStorageBuffer, BufferAccess.ReadOnly);
-            //var vertices = new float[PlotConfig.MeshResX * PlotConfig.MeshResZ];
-            //Marshal.Copy((IntPtr) dataPtr, vertices, 0, vertices.Length);
-            
+
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vboPlotMesh);
             GL.BufferSubData
             (
@@ -354,6 +277,7 @@ namespace OpenTK__Plotter
             );
         }
 
+        //Surface mesh generation on a CPU
         private void UpdatePlotBuffer(float timer)
         {
             _plotMesh.ConstructMesh(timer);
@@ -362,16 +286,7 @@ namespace OpenTK__Plotter
                 _plotMesh.Vertices);
         }
 
-        protected override void OnMouseWheel(MouseWheelEventArgs e)
-        {
-            if (e.OffsetY > 0)
-                _centeredCamera.Position -= (_centeredCamera.Center - _centeredCamera.Position) * 0.1f;
-            else
-                _centeredCamera.Position += (_centeredCamera.Center - _centeredCamera.Position) * 0.1f;
-
-            base.OnMouseWheel(e);
-        }
-
+        //Set the viewport of a newly resized window
         protected override void OnResize(ResizeEventArgs e)
         {
             base.OnResize(e);

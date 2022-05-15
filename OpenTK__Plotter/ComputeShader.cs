@@ -12,6 +12,7 @@ namespace OpenTK__Plotter
 
         private readonly Dictionary<string, int> _uniformLocations;
 
+        //Create a compute shader for GLSL code
         public ComputeShader(string path)
         {
             var shaderSource = File.ReadAllText(path);
@@ -33,8 +34,8 @@ namespace OpenTK__Plotter
 
             GL.GetProgram(Handle, GetProgramParameterName.ActiveUniforms, out var numberOfUniforms);
 
+            //Map uniform locations at compile time for future access at runtime
             _uniformLocations = new Dictionary<string, int>();
-
             for (var i = 0; i < numberOfUniforms; i++)
             {
                 var key = GL.GetActiveUniform(Handle, i, out _, out _);
@@ -47,14 +48,11 @@ namespace OpenTK__Plotter
 
         private static void CompileShader(int shader)
         {
-            // Try to compile the shader
             GL.CompileShader(shader);
-
-            // Check for compilation errors
+            
             GL.GetShader(shader, ShaderParameter.CompileStatus, out var code);
             if (code != (int) All.True)
             {
-                // We can use `GL.GetShaderInfoLog(shader)` to get information about the error.
                 var infoLog = GL.GetShaderInfoLog(shader);
                 throw new Exception($"Error occurred whilst compiling Shader({shader}).\n\n{infoLog}");
             }
@@ -62,14 +60,11 @@ namespace OpenTK__Plotter
 
         private static void LinkProgram(int program)
         {
-            // We link the program
             GL.LinkProgram(program);
-
-            // Check for linking errors
+            
             GL.GetProgram(program, GetProgramParameterName.LinkStatus, out var code);
             if (code != (int) All.True)
             {
-                // We can use `GL.GetProgramInfoLog(program)` to get information about the error.
                 var log = GL.GetProgramInfoLog(program);
                 throw new Exception($"Error occurred whilst linking Program({program})\n\n{log}");
             }
@@ -96,24 +91,44 @@ namespace OpenTK__Plotter
             return GL.GetAttribLocation(Handle, attribName);
         }
 
+        /// <summary>
+        /// Set a uniform int on this shader.
+        /// </summary>
+        /// <param name="name">The name of the uniform</param>
+        /// <param name="data">The data to set</param>
         public void SetInt(string name, int data)
         {
             GL.UseProgram(Handle);
             GL.Uniform1(_uniformLocations[name], data);
         }
 
+        /// <summary>
+        /// Set a uniform float on this shader.
+        /// </summary>
+        /// <param name="name">The name of the uniform</param>
+        /// <param name="data">The data to set</param>
         public void SetFloat(string name, float data)
         {
             GL.UseProgram(Handle);
             GL.Uniform1(_uniformLocations[name], data);
         }
 
+        /// <summary>
+        /// Set a uniform Matrix4 on this shader.
+        /// </summary>
+        /// <param name="name">The name of the uniform</param>
+        /// <param name="data">The data to set</param>
         public void SetMatrix4(string name, Matrix4 data)
         {
             GL.UseProgram(Handle);
             GL.UniformMatrix4(_uniformLocations[name], true, ref data);
         }
 
+        /// <summary>
+        /// Set a uniform Vector3 on this shader.
+        /// </summary>
+        /// <param name="name">The name of the uniform</param>
+        /// <param name="data">The data to set</param>
         public void SetVector3(string name, Vector3 data)
         {
             GL.UseProgram(Handle);

@@ -15,49 +15,47 @@ public class FlyingCameraControls : ICameraControls
         
         if (kbdIn.IsKeyDown(Keys.W))
         {
-            currentCamera.Position += currentCamera.Front * CameraSettings.cameraSpeed * (float) e.Time; // Forward
+            currentCamera.Position += currentCamera.Front * CameraSettings.CameraSpeed * (float) e.Time;
         }
 
         if (kbdIn.IsKeyDown(Keys.S))
         {
-            currentCamera.Position -= currentCamera.Front * CameraSettings.cameraSpeed * (float) e.Time; // Backwards
+            currentCamera.Position -= currentCamera.Front * CameraSettings.CameraSpeed * (float) e.Time;
         }
 
         if (kbdIn.IsKeyDown(Keys.A))
         {
-            currentCamera.Position -= currentCamera.Right * CameraSettings.cameraSpeed * (float) e.Time; // Left
+            currentCamera.Position -= currentCamera.Right * CameraSettings.CameraSpeed * (float) e.Time;
         }
 
         if (kbdIn.IsKeyDown(Keys.D))
         {
-            currentCamera.Position += currentCamera.Right * CameraSettings.cameraSpeed * (float) e.Time; // Right
+            currentCamera.Position += currentCamera.Right * CameraSettings.CameraSpeed * (float) e.Time;
         }
 
         if (kbdIn.IsKeyDown(Keys.Space))
         {
-            currentCamera.Position += currentCamera.Up * CameraSettings.cameraSpeed * (float) e.Time; // Up
+            currentCamera.Position += currentCamera.Up * CameraSettings.CameraSpeed * (float) e.Time;
         }
 
         if (kbdIn.IsKeyDown(Keys.LeftShift))
         {
-            currentCamera.Position -= currentCamera.Up * CameraSettings.cameraSpeed * (float) e.Time; // Down
+            currentCamera.Position -= currentCamera.Up * CameraSettings.CameraSpeed * (float) e.Time;
         }
 
-        if (currentCamera.FirstMove) // This bool variable is initially set to true.
+        if (currentCamera.FirstMove)
         {
             currentCamera.LastPos = new Vector2(mouseIn.X, mouseIn.Y);
             currentCamera.FirstMove = false;
         }
         else
         {
-            // Calculate the offset of the mouse position
             var deltaX = mouseIn.X - currentCamera.LastPos.X;
             var deltaY = mouseIn.Y - currentCamera.LastPos.Y;
             currentCamera.LastPos = new Vector2(mouseIn.X, mouseIn.Y);
-
-            // Apply the camera pitch and yaw (we clamp the pitch in the camera class)
-            currentCamera.Yaw += deltaX * CameraSettings.sensitivity;
-            currentCamera.Pitch -= deltaY * CameraSettings.sensitivity; // Reversed since y-coordinates range from bottom to top
+            
+            currentCamera.Yaw += deltaX * CameraSettings.Sensitivity;
+            currentCamera.Pitch -= deltaY * CameraSettings.Sensitivity;
         }
     }
 }

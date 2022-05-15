@@ -31,9 +31,9 @@ namespace OpenTK__Plotter
             var rnd = new Random();
 
             _vertices = new Vector3[(_xRes) * (_zRes)];
-            _triangles = new uint[(_xRes-1) * (_zRes-1) * 6];
+            _triangles = new uint[(_xRes - 1) * (_zRes - 1) * 6];
 
-            var ySize = _ySpan * 0.9f; //Leave 10% bottom gap
+            var ySize = _ySpan * 0.9f;
             var yOffset = _ySpan - ySize;
 
             int triIndex = 0;
@@ -43,15 +43,9 @@ namespace OpenTK__Plotter
                 {
                     int idx = x + z * _xRes;
 
-                    //float s = 1 + MathF.Cos(timer) * 3; //TODO
-
-                    float vx = x * _xSpan / (_xRes-1);
-                    float vz = z * _zSpan / (_zRes-1);
-                    //float vy = MathHelper.MapRange(x * z, 0f, 16*9f, 0f, 9f);
-                    //float vy = MathHelper.MapRange(s/5*MathF.Sin(s*vx + MathF.Cos(vz)), -1f, 1f, 0, _ySpan);
-                    //float vy = yOffset + s/5 * MathF.Sin(s * vx + MathF.Cos(vz));
-                    //float vy = MathHelper.MapRange(MathF.Cos(s*vx) * MathF.Sin(vz), -1f, 1f, yOffset, ySize);
-                    float vy =DoTheThing(timer, rnd, vx, vz);
+                    float vx = x * _xSpan / (_xRes - 1);
+                    float vz = z * _zSpan / (_zRes - 1);
+                    float vy = Function(timer, rnd, vx, vz);
                     vy = MathHelper.MapRange(vy, 0, 1, 0, _ySpan);
                     _vertices[idx] = new Vector3(vx, vy, vz);
 
@@ -70,14 +64,14 @@ namespace OpenTK__Plotter
             }
         }
 
-        private float DoTheThing(float s, Random rnd, float vx, float vz)
+        private float Function(float s, Random rnd, float vx, float vz)
         {
             float zOff = 6 * MathF.Cos(s) + 8;
             float xOff = 2 * MathF.Sin(s) + 4;
-            
+
             float x = 1 - MathF.Pow(MathF.Abs(2 * (vx - xOff) * 16 / 9 / 5f), 3f);
             x = MathHelper.Clamp(x, 0, 1);
-            
+
             float z = 1 - MathF.Pow(MathF.Abs(2 * (vz - zOff) * 9 / 16 / 2f), 1.5f);
             z = MathHelper.Clamp(z, 0, 1);
 
